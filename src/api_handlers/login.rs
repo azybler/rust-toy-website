@@ -1,6 +1,5 @@
-use actix_web::web;
 use actix_web::web::Form;
-use actix_web::HttpRequest;
+use actix_web::{web, HttpRequest};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use regex::Regex;
@@ -33,6 +32,8 @@ const PARAM_V1__USERNAME: usize = 1;
 const PARAM_V1__PASSWORD: usize = 2;
 
 fn v1(values: Vec<&str>, pool: &Pool<SqliteConnectionManager>) -> String {
+    // TODO: add rate limiting.
+
     let username = values[PARAM_V1__USERNAME];
     let password = values[PARAM_V1__PASSWORD];
 
@@ -57,6 +58,9 @@ fn v1(values: Vec<&str>, pool: &Pool<SqliteConnectionManager>) -> String {
                 password.to_string(),
                 user.right_salt.to_string(),
                 user.encoded_password.to_string(),
+                user.scrypt_n,
+                user.scrypt_r,
+                user.scrypt_p,
             );
             if password_verified {
                 let session_token_result: Option<String> =
@@ -79,8 +83,12 @@ fn verify_password(
     password: String,
     right_salt: String,
     encoded_password: String,
+    scrypt_n: u64,
+    scrypt_r: u32,
+    scrypt_p: u32,
 ) -> bool {
     let password_to_encode = format!("{}{}{}", left_salt, password, right_salt);
-    let encoded_input_password = password_helper::encode_password(password_to_encode);
+    let encoded_input_password =
+        password_helper::encode_password(password_to_encode, scrypt_n, scrypt_r, scrypt_p);
     encoded_input_password == encoded_password
 }

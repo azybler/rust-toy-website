@@ -1,6 +1,5 @@
-use actix_web::web;
 use actix_web::web::Form;
-use actix_web::HttpRequest;
+use actix_web::{web, HttpRequest};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use regex::Regex;
@@ -13,6 +12,9 @@ mod password_helper;
 
 #[path = "../models/mod.rs"]
 mod models;
+
+#[path = "../config.rs"]
+mod config;
 
 const PARAM__VERSION: usize = 0;
 
@@ -59,13 +61,21 @@ fn v1(values: Vec<&str>, pool: &Pool<SqliteConnectionManager>) -> String {
         let right_salt = password_helper::generate_salt();
         let encoded_input_password = {
             let password_to_encode = format!("{}{}{}", left_salt, password, right_salt);
-            password_helper::encode_password(password_to_encode)
+            password_helper::encode_password(
+                password_to_encode,
+                config::SCRYPT_ITERATION,
+                config::SCRYPT_BLOCK_SIZE,
+                config::SCRYPT_PARALLELIZATION_FACTOR,
+            )
         };
         models::user::User {
             username: username.to_string(),
             encoded_password: encoded_input_password,
             left_salt: left_salt,
             right_salt: right_salt,
+            scrypt_n: config::SCRYPT_ITERATION,
+            scrypt_r: config::SCRYPT_BLOCK_SIZE,
+            scrypt_p: config::SCRYPT_PARALLELIZATION_FACTOR,
         }
     };
     models::user::put(user, pool);

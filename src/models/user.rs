@@ -6,11 +6,17 @@ use serde::{Deserialize, Serialize};
 #[path = "../common/string.rs"]
 mod string;
 
+#[path = "../config.rs"]
+mod config;
+
 pub struct User {
     pub username: String,
     pub encoded_password: String,
     pub left_salt: String,
     pub right_salt: String,
+    pub scrypt_n: u64,
+    pub scrypt_r: u32,
+    pub scrypt_p: u32,
 }
 
 pub struct UserWithID {
@@ -19,6 +25,9 @@ pub struct UserWithID {
     pub encoded_password: String,
     pub left_salt: String,
     pub right_salt: String,
+    pub scrypt_n: u64,
+    pub scrypt_r: u32,
+    pub scrypt_p: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -34,10 +43,7 @@ struct UserInternal {
 }
 
 #[allow(dead_code)]
-pub fn insert_session(
-    user_id: String,
-    pool: &Pool<SqliteConnectionManager>,
-) -> Option<String> {
+pub fn insert_session(user_id: String, pool: &Pool<SqliteConnectionManager>) -> Option<String> {
     let conn = pool.clone().get().unwrap();
     let session_token = string::get_random_base64_str();
     let res = conn.execute(
@@ -48,7 +54,6 @@ pub fn insert_session(
     return match res {
         Ok(_v) => Some(session_token.clone()),
         Err(e) => {
-            //TODO: log the errors properly.
             println!("e={}", e);
             None
         }
@@ -62,8 +67,8 @@ pub fn put(user: User, pool: &Pool<SqliteConnectionManager>) {
     while i < 5 {
         let uniq_id = string::get_random_base64_str();
         let res = conn.execute(
-            "INSERT INTO user (id, username, encoded_password, left_salt, right_salt, scrypt_n, scrypt_r, scrypt_p) values (?1, ?2, ?3, ?4, ?5, 2, 8, 1);",
-            params![uniq_id, user.username, user.encoded_password, user.left_salt, user.right_salt],
+            "INSERT INTO user (id, username, encoded_password, left_salt, right_salt, scrypt_n, scrypt_r, scrypt_p, created_time) values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, strftime('%s','now'));",
+            params![uniq_id, user.username, user.encoded_password, user.left_salt, user.right_salt, user.scrypt_n as u8, user.scrypt_r as u8, user.scrypt_p as u8],
         );
         match res {
             Ok(v) => {
@@ -88,7 +93,7 @@ pub fn put(user: User, pool: &Pool<SqliteConnectionManager>) {
 pub fn get(username: &str, pool: &Pool<SqliteConnectionManager>) -> Option<UserWithID> {
     let conn = pool.clone().get().unwrap();
     let res = conn.query_row(
-        "SELECT id, username, encoded_password, left_salt, right_salt FROM user WHERE username=? LIMIT 1;",
+        "SELECT id, username, encoded_password, left_salt, right_salt, scrypt_n, scrypt_r, scrypt_p FROM user WHERE username=? LIMIT 1;",
         params![username],
         |r| {
             Ok(UserWithID {
@@ -97,6 +102,9 @@ pub fn get(username: &str, pool: &Pool<SqliteConnectionManager>) -> Option<UserW
                 encoded_password: r.get::<_, String>(2)?,
                 left_salt: r.get::<_, String>(3)?,
                 right_salt: r.get::<_, String>(4)?,
+                scrypt_n: r.get::<_, u8>(5)?.into(),
+                scrypt_r: r.get::<_, u8>(6)?.into(),
+                scrypt_p: r.get::<_, u8>(7)?.into(),
             })
         },
     );
